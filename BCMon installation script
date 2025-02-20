@@ -1,0 +1,119 @@
+#!/bin/bash
+
+# Create the BCmon directory on the Desktop
+mkdir -p ~/Desktop/BCmon
+cd ~/Desktop/BCmon
+
+# Download the Python script for blockchain monitoring
+cat << 'EOF' > blockchain_monitor.py
+#!/usr/bin/env python3
+
+import requests
+import sys
+import json
+import time
+import urllib.parse
+
+BLOCKCHAIN_API = {
+    "solana": "https://api.mainnet-beta.solana.com",
+    "eth": "https://api.etherscan.io/api",
+    "binance": "https://api.bscscan.com/api",
+    "cronos": "https://api.cronos.org",
+    # Add additional blockchains here
+}
+
+TRANSACTION_SEARCH_TERMS = [
+    'transfer', 'payment', 'deposit', 'withdrawal', 'blockchain', 'crypto',
+    'wallet', 'transaction', 'fee', 'contract', 'token'
+]
+
+def fetch_transactions(chain):
+    """Fetch transactions for a given blockchain."""
+    try:
+        url = BLOCKCHAIN_API.get(chain.lower())
+        if not url:
+            print(f"Blockchain {chain} is not supported.")
+            return []
+
+        response = requests.get(url)
+        response.raise_for_status()
+
+        data = response.json()
+        return data.get('transactions', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data for {chain}: {e}")
+        return []
+
+def perform_search(query):
+    """Search for blockchain-related transactions."""
+    headlines = []
+
+    for term in TRANSACTION_SEARCH_TERMS:
+        search_query = f"{query} {term}"
+        headers = {
+            'User-Agent': 'BCmon CLI Tool'
+        }
+        params = {'q': urllib.parse.quote(search_query)}
+
+        try:
+            response = requests.get(BLOCKCHAIN_API['eth'], headers=headers, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            if 'transactions' in data:
+                for tx in data['transactions']:
+                    headlines.append({'tx_hash': tx['hash'], 'from': tx['from'], 'to': tx['to'], 'value': tx['value']})
+
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred while querying transactions: {e}")
+
+    return headlines
+
+def monitor_blockchain(chain):
+    """Monitor the blockchain for transactions."""
+    print(f"Monitoring {chain} blockchain... Press Ctrl+C to stop.")
+    while True:
+        transactions = fetch_transactions(chain)
+        if transactions:
+            for tx in transactions:
+                print(f"Transaction: {tx}")
+        else:
+            print("No transactions found.")
+        time.sleep(5)  # Check every 5 seconds
+
+def display_results(results):
+    """Display transaction results in the terminal."""
+    if not results:
+        print("No results found.")
+        return
+
+    for result in results:
+        print(f"Transaction Hash: {result['tx_hash']}")
+        print(f"From: {result['from']}")
+        print(f"To: {result['to']}")
+        print(f"Value: {result['value']}")
+        print("-" * 80)
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: BCmon <chain>")
+        sys.exit(1)
+
+    chain = sys.argv[1].lower()
+    if chain in BLOCKCHAIN_API:
+        print(f"Fetching transactions for {chain}...")
+        transactions = fetch_transactions(chain)
+        display_results(transactions)
+    else:
+        print("Unsupported blockchain. Please choose from Solana, Ethereum, BNB, Cronos.")
+        sys.exit(1)
+EOF
+
+# Make the blockchain_monitor.py script executable
+chmod +x blockchain_monitor.py
+
+# Create a symlink to make the command available in the PATH
+sudo ln -s ~/Desktop/BCmon/blockchain_monitor.py /usr/local/bin/BCmon
+
+echo "Installation complete. You can now use the 'BCmon' command from anywhere to monitor blockchain transactions."
+
